@@ -48,7 +48,7 @@ GOMARKDOC ?= $(LOCALBIN)/gomarkdoc
 
 ## Tool Versions
 LICENSE_HEADER_CHECKER_VERSION ?= v1.4.0
-GINKGO_VERSION ?= v2.9.4
+GINKGO_VERSION ?= v2.13.0
 GOMARKDOC_VERSION ?= v1.1.0
 
 .PHONY: license-header-checker
