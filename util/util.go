@@ -21,6 +21,7 @@ import (
 	"reflect"
 
 	"github.com/kubespress/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/pointer"
@@ -182,4 +183,52 @@ func NewObject[T client.Object]() (T, error) {
 
 	// Create new instance of the object
 	return reflect.New(typ.Elem()).Interface().(T), nil
+}
+
+func newListObject[T client.Object](kubeclient client.Client) (client.ObjectList, error) {
+	// Create a normal object
+	object, err := NewObject[T]()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get GroupVersionKind of object
+	gvk, err := apiutil.GVKForObject(object, kubeclient.Scheme())
+	if err != nil {
+		return nil, err
+	}
+
+	// Edit the GVK to get the list object
+	gvk.Kind += "List"
+
+	// Get the list object from the scheme
+	list, err := kubeclient.Scheme().New(gvk)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return the list object
+	return list.(client.ObjectList), nil
+}
+
+func List[T client.Object](ctx context.Context, client client.Client, opts ...client.ListOption) ([]T, error) {
+	list, err := newListObject[T](client)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := client.List(ctx, list, opts...); err != nil {
+		return nil, err
+	}
+
+	itemsPtr, err := meta.GetItemsPtr(list)
+	if err != nil {
+		return nil, err
+	}
+
+	if typed, ok := itemsPtr.(*[]T); ok {
+		return *typed, nil
+	}
+
+	return nil, errors.Errorf("expected %T got %T", &([]T{}), itemsPtr)
 }
