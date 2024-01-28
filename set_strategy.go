@@ -50,6 +50,16 @@ type SetStrategy interface {
 	SetName(objects ObjectSliceAccessor, current client.Object) error
 }
 
+// DeterministicSetStrategy is a set strategy where the names are completely
+// deterministic and are known ahead of time
+type DeterministicSetStrategy interface {
+	SetStrategy
+
+	// Names returns the set of desired object names, these are not guaranteed
+	// to exist.
+	Names() []string
+}
+
 // ObjectSliceAccessor is used to access items in a slice of client.Objects.
 type ObjectSliceAccessor interface {
 	Get(int) client.Object
@@ -76,7 +86,7 @@ type indexedSetStrategy struct {
 // index is a zero indexed, incrementing numeric value. For example, this could
 // generate the names example-0, example-1, etc. Using this strategy the highest
 // index is deleted first during scale-down.
-func IndexedSetStrategy(prefix string, replicas int) SetStrategy {
+func IndexedSetStrategy(prefix string, replicas int) DeterministicSetStrategy {
 	// Return the strategy
 	return &indexedSetStrategy{
 		prefix:   prefix,
@@ -199,6 +209,15 @@ func (s *indexedSetStrategy) generateName(i int) string {
 	return fmt.Sprintf("%s%d", prefix, i)
 }
 
+// Names returns the desired names using this strategy
+func (s *indexedSetStrategy) Names() []string {
+	names := make([]string, s.replicas)
+	for i := 0; i < s.replicas; i++ {
+		names[i] = s.generateName(i)
+	}
+	return names
+}
+
 type generatedNameSetStrategy struct {
 	prefix   string
 	replicas int
@@ -288,7 +307,7 @@ type fixedNamingStrategy struct {
 // pre-defined names. If a prefix is specified then the names will also be
 // prefixed by this value, with a hyphen separator. Using this strategy the
 // oldest object is deleted first during scale-down.
-func FixedNameSetStrategy(prefix string, names []string) SetStrategy {
+func FixedNameSetStrategy(prefix string, names []string) DeterministicSetStrategy {
 	// Return the strategy
 	return &fixedNamingStrategy{
 		prefix: prefix,
@@ -406,6 +425,15 @@ func (s fixedNamingStrategy) generateName(suffix string) string {
 	return fmt.Sprintf("%s-%s", s.prefix, suffix)
 }
 
+// Names returns the generated names used by this strategy
+func (s fixedNamingStrategy) Names() []string {
+	names := make([]string, len(s.names))
+	for i, suffix := range s.names {
+		names[i] = s.generateName(suffix)
+	}
+	return names
+}
+
 // ForEachSetStrategyLookup is a lookup returned by the ForEachSetStrategy
 // function, it allows the source object to easily be looked up.
 type ForEachSetStrategyLookup[T client.Object] map[string]T
@@ -419,7 +447,7 @@ func (f ForEachSetStrategyLookup[T]) Source(o client.Object) (T, bool) {
 // ForEachSetStrategy is a convenience method to generate a strategy that
 // produces an object for each input object. It also returns a lookup that can
 // be used to obtain the source object from the name.
-func ForEachSetStrategy[T client.Object](prefix string, objects []T) (SetStrategy, ForEachSetStrategyLookup[T]) {
+func ForEachSetStrategy[T client.Object](prefix string, objects []T) (DeterministicSetStrategy, ForEachSetStrategyLookup[T]) {
 	// Store names
 	names := make([]string, len(objects))
 	lookup := make(ForEachSetStrategyLookup[T])
